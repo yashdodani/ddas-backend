@@ -7,22 +7,22 @@ const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-const sampleMetadata = {
-  date: 'Sat, 07 Sep 2024 19:47:41 GMT',
-  server:
-    'Apache/2.4.37 (Red Hat Enterprise Linux) OpenSSL/1.1.1k mod_fcgid/2.3.9 Phusion_Passenger/6.0.23',
-  'last-modified': 'Fri, 15 Feb 2013 05:09:52 GMT',
-  etag: '"93f7-4d5bc629f0800"',
-  'accept-ranges': 'bytes',
-  'content-length': '37879',
-  connection: 'close',
-  'content-type': 'application/pdf',
+const metadataUrl = 'http://localhost:8001/api/metadata';
+const fileUrl = 'http://localhost:8001/api/file';
+
+const hashChunk = (data) => {
+  const hash = crypto.createHash('sha256');
+  hash.update(data);
+  return hash.digest('hex');
 };
 
-const compareMetadata = async (req, res) => {
+const compare = async (req, res) => {
   // const agent = new https.Agent({
   //   rejectUnauthorized: false,
   // });
+
+  const allFiles = await prisma.file.findMany();
+  console.log(allFiles);
 
   const url = req.query.url;
 
@@ -32,7 +32,7 @@ const compareMetadata = async (req, res) => {
 
   try {
     // const metadata = await axios.get(url, { httpsAgent: agent });
-    const metadata = (await axios.get(url)).data;
+    const metadata = (await axios.get(metadataUrl)).data;
 
     const hash = crypto.createHash('sha256');
     hash.update(JSON.stringify(metadata));
@@ -50,9 +50,9 @@ const compareMetadata = async (req, res) => {
       });
     }
 
-    const chunkSize = 10 * 1024 * 1024;
+    const chunkSize = 10 * 1024 * 1024; // 10mb
 
-    http.get(url, (response) => {
+    http.get(fileUrl, (response) => {
       let data = Buffer.alloc(0);
 
       response.on('data', (chunk) => {
@@ -66,9 +66,6 @@ const compareMetadata = async (req, res) => {
         // hash the collected chunk
         const hash = hashChunk(data);
         console.log('hash: ', hash);
-
-        // const allFiles = await prisma.file.findMany();
-        // console.log(allFiles);
 
         const matchedFile = await prisma.file.findUnique({
           where: { contentHash: hash },
@@ -92,52 +89,4 @@ const compareMetadata = async (req, res) => {
   }
 };
 
-const hashChunk = (data) => {
-  const hash = crypto.createHash('sha256');
-  hash.update(data);
-  return hash.digest('hex');
-};
-
-const compareContent = async (req, res) => {
-  const url = req.query.url;
-
-  const chunkSize = 10 * 1024 * 1024;
-
-  http.get(url, (response) => {
-    let data = Buffer.alloc(0);
-
-    response.on('data', (chunk) => {
-      // collect data until we reach size
-      if (data.length < chunkSize) {
-        data = Buffer.concat([data, chunk]);
-      }
-    });
-
-    response.on('end', async () => {
-      // hash the collected chunk
-      const hash = hashChunk(data);
-      console.log('hash: ', hash);
-
-      // const allFiles = await prisma.file.findMany();
-      // console.log(allFiles);
-
-      const matchedFile = await prisma.file.findUnique({
-        where: { contentHash: hash },
-      });
-
-      if (!matchedFile) {
-        res.json({
-          fileFound: false,
-          objectId: null,
-        });
-      } else {
-        res.json({
-          fileFound: true,
-          objectId: matchedFile.id,
-        });
-      }
-    });
-  });
-};
-
-module.exports = { compareMetadata, compareContent };
+module.exports = { compare };
