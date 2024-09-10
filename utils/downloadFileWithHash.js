@@ -31,21 +31,23 @@ function downloadFileWithHash(url, METADATA, METADATAHASH) {
       let data = Buffer.alloc(0);
 
       console.log(`Starting download from ${url}`);
-      let dataLength = 0;
+      let totalDownloaded = 0;
 
       response.on('data', (chunk) => {
         if (data.length <= chunkSize) {
           data = Buffer.concat([data, chunk]);
         }
-        dataLength += chunk.length;
+        totalDownloaded += chunk.length;
 
         // append to file
         fs.appendFile(filePath, chunk, function (err) {
           if (err) throw err;
         });
 
+        const progress = Math.round(totalDownloaded / filesize) * 100;
+
         // send event
-        // io.emit('download_progress', { dataLength, filesize });
+        io.emit('download_progress', { dataLength, progress, filesize });
       });
 
       response.on('end', async () => {

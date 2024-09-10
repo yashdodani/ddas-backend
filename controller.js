@@ -8,6 +8,7 @@ const downloadFile = require('./utils/downloadFile');
 const downloadFileWithHash = require('./utils/downloadFileWithHash');
 const agent = require('./agent');
 const hashChunk = require('./utils/hashChunk');
+const io = require('./index');
 
 let METADATA;
 let METADATAHASH;
@@ -99,7 +100,6 @@ const compare = async (req, res) => {
     console.log('METADATA matched, comparing content now...');
 
     const matchedFile = await compareContent(url);
-    console.log(matchedFile);
 
     if (!matchedFile) {
       // download from internet
@@ -110,18 +110,62 @@ const compare = async (req, res) => {
         CONTENTHASH
       );
 
-      console.log('file already existed', objectId);
+      console.log('File downloaded', objectId);
 
       return res.json({
         matchFound: false,
         id: objectId,
       });
     } else {
-      res.sendFile(path.join(process.cwd(), matchedFile.filePath));
+      return res.json({
+        matchFound: true,
+        id: matchedFile.id,
+      });
     }
   } catch (err) {
     console.log(err);
   }
 };
 
-module.exports = { compare };
+async function getFile() {
+  const id = req.params.id;
+
+  // get filePath from prisma
+  const fileInDb = await prisma.file.findUnique({
+    where: { id },
+  });
+
+  if (!fileInDb) {
+    res.json({
+      message: 'Incorrect ID',
+    });
+  }
+
+  // using filePath, stream the file to client
+  const filePath = fileInDb.filePath;
+
+  const fileSize = fs.statSync(path.join(process.cwd(), filePath));
+
+  const stream = fs.createReadStream(path.join(process.cwd(), filePath));
+  let totalSent = 0;
+
+  stream.on('data', (chunk) => {
+    totalSent += chunk.length;
+
+    let progress = Math.round(totalSent / fileSize) * 100;
+    io.emit('copy_progress', { totalSent, progress });
+  });
+
+  stream.on('end', () => {
+    res.end();
+  });
+
+  stream.on('error', (err) => {
+    console.error(err);
+    res.status(500).json({
+      message: 'Error downloading file',
+    });
+  });
+}
+
+module.exports = { compare, getFile };

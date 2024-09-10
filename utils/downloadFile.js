@@ -23,16 +23,18 @@ function downloadFile(url, METADATA, METADATAHASH, CONTENTHASH) {
 
     https.get(url, { agent }, (response) => {
       console.log(`Starting download from ${url}`);
-      let dataLength = 0;
+      let totalDownloaded = 0;
       response.on('data', (chunk) => {
-        dataLength += chunk.length;
+        totalDownloaded += chunk.length;
+
         // append to file
         fs.appendFile(filePath, chunk, function (err) {
           if (err) throw err;
         });
 
+        const progress = Math.round(totalDownloaded / filesize) * 100;
         // send event
-        // io.emit('download_progress', { dataLength, filesize });
+        io.emit('download_progress', { totalDownloaded, progress, filesize });
       });
 
       response.on('end', async () => {
