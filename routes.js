@@ -1,5 +1,5 @@
 const express = require('express');
-const { compare, compareContent } = require('./controller');
+const { compare } = require('./controller');
 
 const router = express.Router();
 

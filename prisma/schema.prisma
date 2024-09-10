@@ -13,7 +13,8 @@ datasource db {
 model File {
   id Int @id @default(autoincrement())
 
-  title        String
-  metadataHash String
-  contentHash  String @unique
+  title        String?
+  metadataHash String?
+  contentHash  String? @unique
+  filePath     String
 }
