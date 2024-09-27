@@ -9,6 +9,7 @@ const downloadFileWithHash = require("./utils/downloadFileWithHash");
 const agent = require("./agent");
 const hashChunk = require("./utils/hashChunk");
 const { io } = require("./socket");
+const fs = require("node:fs");
 
 let METADATA;
 let METADATAHASH;
@@ -45,17 +46,23 @@ const compareContent = (url) => {
   return new Promise((resolve) => {
     const chunkSize = 10 * 1024 * 1024; // 10mb
 
-    https.get(url, { agent: agent }, (response) => {
+    const res = https.get(url, { agent: agent }, (response) => {
       console.log("Getting chunks to hash...");
       let data = Buffer.alloc(0);
 
       response.on("data", (chunk) => {
         if (data.length <= chunkSize) {
           data = Buffer.concat([data, chunk]);
+        } else {
+          res.abort();
         }
       });
 
       response.on("end", async () => {
+        console.log("end");
+      });
+
+      response.on("close", async () => {
         data = data.slice(0, chunkSize);
 
         const hash = hashChunk(data);
@@ -127,12 +134,12 @@ const compare = async (req, res) => {
   }
 };
 
-async function getFile() {
+async function getFile(req, res) {
   const id = req.params.id;
 
   // get filePath from prisma
   const fileInDb = await prisma.file.findUnique({
-    where: { id },
+    where: { id: Number(id) },
   });
 
   if (!fileInDb) {
