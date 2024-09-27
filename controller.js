@@ -46,7 +46,7 @@ const compareContent = (url) => {
   return new Promise((resolve) => {
     const chunkSize = 10 * 1024 * 1024; // 10mb
 
-    const res = https.get(url, { agent: agent }, (response) => {
+    https.get(url, { agent: agent }, (response) => {
       console.log("Getting chunks to hash...");
       let data = Buffer.alloc(0);
 
@@ -93,10 +93,12 @@ const compare = async (req, res) => {
     const foundFiles = await compareMetadata(url);
 
     if (foundFiles.length === 0) {
+      console.log("No Matching Files Found.");
+
       // download from the internet
       const objectId = await downloadFileWithHash(url, METADATA, METADATAHASH);
 
-      console.log("new file created with hash", objectId);
+      console.log("New file created");
 
       return res.json({
         matchFound: false,
@@ -124,6 +126,7 @@ const compare = async (req, res) => {
         id: objectId,
       });
     } else {
+      console.log("CONTENT HASH matched. File Already Exists.");
       return res.json({
         matchFound: true,
         id: matchedFile.id,
@@ -175,4 +178,49 @@ async function getFile(req, res) {
   });
 }
 
-module.exports = { compare, getFile };
+const fileInfo = async (req, res) => {
+  try {
+    const id = req.params.id;
+    console.log({ id });
+    const foundFile = await prisma.file.findFirst({
+      where: { id: Number(id) },
+    });
+    console.log(foundFile);
+    return res.json(foundFile);
+  } catch (error) {
+    console.log(error);
+    res.status(404).json({ message: "Some error occured" });
+  }
+};
+
+const deleteFile = async (req, res) => {
+  const id = Number(req.params.id);
+
+  try {
+    const deletedDoc = await prisma.file.delete({
+      where: { id: id },
+    });
+
+    fs.unlink(`.${deletedDoc.filePath}`, (err) => {
+      if (err) {
+        console.error(`Error removing file: ${err}`);
+        return;
+      }
+    });
+
+    console.log(`FILE DELETED: ${deletedDoc.title}`);
+
+    res.status(204).json({
+      message: "File delete successfully",
+    });
+  } catch (err) {
+    console.log(err.message);
+  }
+};
+
+const getAllFiles = async (req, res) => {
+  const files = await prisma.file.findMany();
+  res.json(files);
+};
+
+module.exports = { compare, getFile, fileInfo, deleteFile, getAllFiles };
