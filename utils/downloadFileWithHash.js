@@ -7,7 +7,9 @@ const agent = require('../agent');
 const hashChunk = require('./hashChunk');
 const { io } = require('../socket');
 
+let prevTime = Date.now();
 function downloadFileWithHash(url, METADATA, METADATAHASH) {
+  prevTime = Date.now();
   return new Promise((resolve) => {
     // 1. create a file with same name as headers
     const splitPath = METADATA.path.split('/');
@@ -50,12 +52,22 @@ function downloadFileWithHash(url, METADATA, METADATAHASH) {
         const progress = Math.round((totalDownloaded / filesize) * 100);
 
         // send event
-        io.emit('download_progress', {
-          fileName: filename,
-          fileSize: Number(filesize),
-          downloadedLength: data.length,
-          progress,
-        });
+        if (Date.now() - prevTime >= 1000) {
+          io.emit('download_progress', {
+            fileName: filename,
+            fileSize: Number(filesize),
+            downloadedLength: totalDownloaded,
+            progress,
+          });
+          console.log({
+            fileName: filename,
+            fileSize: Number(filesize),
+            downloadedLength: totalDownloaded,
+            progress,
+            now: Date.now() / (1000 * 1000),
+          });
+          prevTime = Date.now();
+        }
       });
 
       response.on('end', async () => {
