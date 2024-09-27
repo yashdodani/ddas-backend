@@ -1,20 +1,22 @@
-const https = require('node:https');
-const fs = require('fs');
-const path = require('path');
-const { PrismaClient } = require('@prisma/client');
+const https = require("node:https");
+const fs = require("fs");
+const path = require("path");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const agent = require('../agent');
-const hashChunk = require('./hashChunk');
+const agent = require("../agent");
+const hashChunk = require("./hashChunk");
+const { io } = require("../socket");
 
 function downloadFileWithHash(url, METADATA, METADATAHASH) {
   return new Promise((resolve) => {
     // 1. create a file with same name as headers
-    const splitPath = METADATA.path.split('/');
-    const filesize = METADATA['content-length'];
+    const splitPath = METADATA.path.split("/");
+    const filesize = METADATA.size;
     const filename = splitPath[splitPath.length - 1];
-    const filePath = path.join(process.cwd(), 'datasets', filename);
+    const filePath = path.join(process.cwd(), "datasets", filename);
+    console.log({ METADATA, filesize, filename });
 
-    fs.open(filePath, 'w', function (err, file) {
+    fs.open(filePath, "w", function (err, file) {
       if (err) throw err;
       console.log(`Created with hash ${filename}`);
     });
@@ -22,8 +24,8 @@ function downloadFileWithHash(url, METADATA, METADATAHASH) {
     // 2. start getting file from the internet
     // emit event 'download_progress' and send data to client
     let chunkSize;
-    if (METADATA['content-length'] <= 10485760) {
-      chunkSize = Number(METADATA['content-length']);
+    if (filesize <= 10485760) {
+      chunkSize = filesize;
     }
     chunkSize = 10 * 1024 * 1024; // 10mb
 
@@ -33,7 +35,7 @@ function downloadFileWithHash(url, METADATA, METADATAHASH) {
       console.log(`Starting download from ${url}`);
       let totalDownloaded = 0;
 
-      response.on('data', (chunk) => {
+      response.on("data", (chunk) => {
         if (data.length <= chunkSize) {
           data = Buffer.concat([data, chunk]);
         }
@@ -44,13 +46,18 @@ function downloadFileWithHash(url, METADATA, METADATAHASH) {
           if (err) throw err;
         });
 
-        const progress = Math.round(totalDownloaded / filesize) * 100;
+        const progress = Math.round((totalDownloaded / filesize) * 100);
 
         // send event
-        io.emit('download_progress', { dataLength, progress, filesize });
+        io.emit("download_progress", {
+          fileName: filename,
+          fileSize: Number(filesize),
+          downloadedLength: data.length,
+          progress,
+        });
       });
 
-      response.on('end', async () => {
+      response.on("end", async () => {
         data = data.slice(0, chunkSize);
         const hash = hashChunk(data);
 
